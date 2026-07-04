@@ -16,3 +16,10 @@
 
 # Fichiers temporaires ou de crash de VS Code
 .vscode-test/
+
+# wrangler files
+.wrangler
+.dev.vars*
+!.dev.vars.example
+.env*
+!.env.example
