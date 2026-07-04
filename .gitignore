@@ -1,0 +1,18 @@
+
+#########################################################################
+#	VSCode gitignore						#
+#########################################################################
+
+# Fichiers et dossiers spécifiques à VS Code
+.vscode/
+!.vscode/extensions.json
+!.vscode/launch.json
+!.vscode/tasks.json
+!.vscode/settings.json
+
+# Fichiers d'historique locale (générés par VS Code ou des extensions)
+.history/
+*.code-workspace
+
+# Fichiers temporaires ou de crash de VS Code
+.vscode-test/
