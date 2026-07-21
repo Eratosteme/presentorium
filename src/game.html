@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local CCG PoC</title>
+    <style>
+        :root {
+            --bg-color: #1a1a24;
+            --p1-color: #2b5278;
+            --p2-color: #782b2b;
+            --card-bg: #2a2a38;
+            --accent: #f38020;
+        }
+
+        body {
+            font-family: system-ui, sans-serif;
+            background: var(--bg-color);
+            color: #fff;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            user-select: none;
+        }
+
+        header {
+            width: 100%;
+            max-width: 900px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        a.back-btn {
+            color: #aaa;
+            text-decoration: none;
+            font-size: 0.9rem;
+        }
+
+        #game-board {
+            width: 100%;
+            max-width: 900px;
+            background: #121218;
+            border: 2px solid #333;
+            border-radius: 12px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+        }
+
+        .player-zone {
+            padding: 10px;
+            border-radius: 8px;
+            background: rgba(255,255,255,0.03);
+        }
+
+        .player-info {
+            display: flex;
+            justify-content: space-between;
+            font-weight: bold;
+            margin-bottom: 8px;
+            padding: 5px 10px;
+            border-radius: 4px;
+        }
+
+        .p1-bg { background: var(--p1-color); }
+        .p2-bg { background: var(--p2-color); }
+
+        .battlefield {
+            min-height: 90px;
+            border: 1px dashed #444;
+            border-radius: 6px;
+            display: flex;
+            gap: 10px;
+            padding: 10px;
+            align-items: center;
+        }
+
+        .hand {
+            display: flex;
+            gap: 10px;
+            min-height: 100px;
+            margin-top: 5px;
+        }
+
+        .card, .unit {
+            width: 80px;
+            height: 100px;
+            background: var(--card-bg);
+            border: 2px solid #555;
+            border-radius: 6px;
+            padding: 6px;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            text-align: center;
+            cursor: pointer;
+            box-sizing: border-box;
+            position: relative;
+        }
+
+        .card:hover, .unit:hover { border-color: var(--accent); }
+        .card.selected, .unit.selected { border-color: #00ffcc; box-shadow: 0 0 8px #00ffcc; }
+        
+        .cost { position: absolute; top: 4px; left: 4px; background: #007acc; border-radius: 50%; width: 18px; height: 18px; line-height: 18px; font-weight: bold; }
+        .title { font-weight: bold; margin-top: 18px; font-size: 0.8rem; }
+        .stats { display: flex; justify-content: space-between; font-weight: bold; }
+        .atk { color: #ff5555; }
+        .hp { color: #55ff55; }
+
+        .spell-card { border-color: #a020f0; }
+
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 10px;
+        }
+
+        button {
+            padding: 10px 20px;
+            background: var(--accent);
+            border: none;
+            color: white;
+            font-weight: bold;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+
+        button:hover { background: #d96b12; }
+        #status-log { font-weight: bold; color: #ffcc00; }
+        .targetable { animation: pulse 1s infinite alternate; }
+
+        @keyframes pulse {
+            from { border-color: #ff0055; }
+            to { border-color: #ffcc00; }
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <a href="index.html" class="back-btn">&larr; Back to Index</a>
+        <h2>1v1 Turn-Based Engine PoC</h2>
+    </header>
+
+    <div id="game-board">
+        <!-- Player 2 (Top) -->
+        <div class="player-zone">
+            <div class="player-info p2-bg" id="p2-hero" onclick="handleTarget('hero', 2)">
+                <span>Player 2 (Opponent)</span>
+                <span>HP: <span id="p2-hp">15</span> | Mana: <span id="p2-mana">1</span>/<span id="p2-max-mana">1</span></span>
+            </div>
+            <div class="battlefield" id="p2-board"></div>
+            <div class="hand" id="p2-hand"></div>
+        </div>
+
+        <hr style="border-color: #333; width: 100%;">
+
+        <!-- Player 1 (Bottom) -->
+        <div class="player-zone">
+            <div class="hand" id="p1-hand"></div>
+            <div class="battlefield" id="p1-board"></div>
+            <div class="player-info p1-bg" id="p1-hero" onclick="handleTarget('hero', 1)">
+                <span>Player 1 (You)</span>
+                <span>HP: <span id="p1-hp">15</span> | Mana: <span id="p1-mana">1</span>/<span id="p1-max-mana">1</span></span>
+            </div>
+        </div>
+    </div>
+
+    <div class="controls" style="width: 100%; max-width: 900px;">
+        <span id="status-log">Player 1's Turn</span>
+        <button onclick="endTurn()">End Turn</button>
+    </div>
+
+    <script>
+        // Card Definitions (2 Units, 1 Spell)
+        const CARDS = {
+            FOOTMAN: { id: 'FOOTMAN', name: 'Footman', type: 'unit', cost: 2, atk: 2, hp: 3 },
+            ARCHER:  { id: 'ARCHER',  name: 'Archer',  type: 'unit', cost: 1, atk: 1, hp: 1 },
+            FIREBALL:{ id: 'FIREBALL',name: 'Fireball',type: 'spell',cost: 2, damage: 3 }
+        };
+
+        // Game State
+        const state = {
+            activePlayer: 1,
+            selectedAction: null, // { type: 'play'|'attack', card/unit info }
+            players: {
+                1: { hp: 15, mana: 1, maxMana: 1, hand: [CARDS.ARCHER, CARDS.FOOTMAN, CARDS.FIREBALL], board: [] },
+                2: { hp: 15, mana: 1, maxMana: 1, hand: [CARDS.ARCHER, CARDS.FOOTMAN, CARDS.FIREBALL], board: [] }
+            }
+        };
+
+        function render() {
+            [1, 2].forEach(p => {
+                const isCurrent = state.activePlayer === p;
+                
+                // Stats
+                document.getElementById(`p${p}-hp`).innerText = state.players[p].hp;
+                document.getElementById(`p${p}-mana`).innerText = state.players[p].mana;
+                document.getElementById(`p${p}-max-mana`).innerText = state.players[p].maxMana;
+
+                // Hands (Only show active player cards face-up)
+                const handEl = document.getElementById(`p${p}-hand`);
+                handEl.innerHTML = '';
+                if (isCurrent) {
+                    state.players[p].hand.forEach((card, idx) => {
+                        const cardDiv = document.createElement('div');
+                        cardDiv.className = `card ${card.type === 'spell' ? 'spell-card' : ''}`;
+                        cardDiv.onclick = () => selectHandCard(idx);
+                        cardDiv.innerHTML = `
+                            <div class="cost">${card.cost}</div>
+                            <div class="title">${card.name}</div>
+                            <div class="stats">
+                                ${card.type === 'unit' ? `<span class="atk">${card.atk}</span><span class="hp">${card.hp}</span>` : `<span class="atk">Spell</span>`}
+                            </div>
+                        `;
+                        handEl.appendChild(cardDiv);
+                    });
+                }
+
+                // Boards
+                const boardEl = document.getElementById(`p${p}-board`);
+                boardEl.innerHTML = '';
+                state.players[p].board.forEach((unit) => {
+                    const unitDiv = document.createElement('div');
+                    unitDiv.className = `unit ${unit.canAttack ? 'targetable' : ''}`;
+                    unitDiv.onclick = (e) => { e.stopPropagation(); handleTarget('unit', p, unit.id); };
+                    unitDiv.innerHTML = `
+                        <div class="title">${unit.name}</div>
+                        <div class="stats">
+                            <span class="atk">${unit.atk}</span>
+                            <span class="hp">${unit.hp}</span>
+                        </div>
+                    `;
+                    boardEl.appendChild(unitDiv);
+                });
+            });
+        }
+
+        function log(msg) {
+            document.getElementById('status-log').innerText = msg;
+        }
+
+        function selectHandCard(index) {
+            const player = state.players[state.activePlayer];
+            const card = player.hand[index];
+
+            if (player.mana < card.cost) {
+                log("Not enough mana!");
+                return;
+            }
+
+            if (card.type === 'unit') {
+                if (player.board.length >= 7) return log("Board is full!");
+                // Play unit immediately
+                player.mana -= card.cost;
+                player.board.push({ ...card, id: Date.now(), canAttack: false });
+                player.hand.splice(index, 1);
+                log(`Played ${card.name}.`);
+            } else if (card.type === 'spell') {
+                // Spell requires targeting
+                state.selectedAction = { type: 'spell', handIndex: index, card: card };
+                log(`Select a target for ${card.name}!`);
+            }
+            render();
+        }
+
+        function handleTarget(targetType, targetPlayerOwner, unitId = null) {
+            const action = state.selectedAction;
+
+            // Attack Action
+            if (action && action.type === 'attack') {
+                if (targetPlayerOwner === state.activePlayer) return log("Cannot attack your own characters!");
+                
+                const attacker = state.players[state.activePlayer].board.find(u => u.id === action.unitId);
+                
+                if (targetType === 'hero') {
+                    state.players[targetPlayerOwner].hp -= attacker.atk;
+                    log(`${attacker.name} attacked Player ${targetPlayerOwner} for ${attacker.atk} damage!`);
+                } else if (targetType === 'unit') {
+                    const defender = state.players[targetPlayerOwner].board.find(u => u.id === unitId);
+                    defender.hp -= attacker.atk;
+                    attacker.hp -= defender.atk; // Combat recoil
+                    log(`${attacker.name} traded with ${defender.name}!`);
+                }
+
+                attacker.canAttack = false;
+                state.selectedAction = null;
+                cleanDeadEntities();
+                checkWin();
+                render();
+                return;
+            }
+
+            // Spell Action
+            if (action && action.type === 'spell') {
+                const player = state.players[state.activePlayer];
+                player.mana -= action.card.cost;
+
+                if (targetType === 'hero') {
+                    state.players[targetPlayerOwner].hp -= action.card.damage;
+                    log(`Fireball hit Player ${targetPlayerOwner} for ${action.card.damage} damage!`);
+                } else if (targetType === 'unit') {
+                    const targetUnit = state.players[targetPlayerOwner].board.find(u => u.id === unitId);
+                    targetUnit.hp -= action.card.damage;
+                    log(`Fireball hit ${targetUnit.name} for ${action.card.damage} damage!`);
+                }
+
+                player.hand.splice(action.handIndex, 1);
+                state.selectedAction = null;
+                cleanDeadEntities();
+                checkWin();
+                render();
+                return;
+            }
+
+            // Unit Selection for Attack
+            if (targetType === 'unit' && targetPlayerOwner === state.activePlayer) {
+                const unit = state.players[targetPlayerOwner].board.find(u => u.id === unitId);
+                if (unit.canAttack) {
+                    state.selectedAction = { type: 'attack', unitId: unit.id };
+                    log(`Selected ${unit.name} to attack. Click an enemy unit or hero!`);
+                } else {
+                    log("This unit cannot attack this turn.");
+                }
+            }
+        }
+
+        function cleanDeadEntities() {
+            [1, 2].forEach(p => {
+                state.players[p].board = state.players[p].board.filter(u => u.hp > 0);
+            });
+        }
+
+        function checkWin() {
+            if (state.players[1].hp <= 0) alert("Player 2 Wins!");
+            if (state.players[2].hp <= 0) alert("Player 1 Wins!");
+        }
+
+        function endTurn() {
+            state.selectedAction = null;
+            state.activePlayer = state.activePlayer === 1 ? 2 : 1;
+            
+            const active = state.players[state.activePlayer];
+            
+            // Mana Increment (Cap at 10)
+            if (active.maxMana < 10) active.maxMana++;
+            active.mana = active.maxMana;
+
+            // Enable unit attacks for new turn owner
+            active.board.forEach(u => u.canAttack = true);
+
+            log(`Player ${state.activePlayer}'s Turn!`);
+            render();
+        }
+
+        // Initialize First Render
+        render();
+    </script>
+</body>
+</html>
